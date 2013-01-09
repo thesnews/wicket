@@ -1,0 +1,35 @@
+{
+  "name": "wicket",
+  "description": "SNworks custom widgets",
+  "version": "0.1.0",
+  "homepage": "https://github.com/thesnews/wicket",
+  "author": {
+    "name": "Mike Joseph",
+    "email": "mike.joseph5@gmail.com",
+    "url": "http://getsnworks.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thesnews/wicket"
+  },
+  "bugs": {
+    "url": "https://github.com/thesnews/wicket/issues"
+  },
+  "licenses": [
+    {
+      "type": "MIT",
+      "url": "https://github.com/thesnews/wicket/blob/master/LICENSE-MIT"
+    }
+  ],
+  "main": "app node.js",
+  "engines": {
+    "node": ">= 0.6.0"
+  },
+  "scripts": {
+    "test": "grunt test"
+  },
+  "devDependencies": {
+    "grunt": "~0.3.17"
+  },
+  "keywords": []
+}
