@@ -1,0 +1,34 @@
+(function() {
+    var loadCheck;
+
+    loadCheck = function() {
+      var jQ, HB, loaded = 0;
+      if( !(typeof jQuery !== "undefined" && jQuery !== null) ) {
+        jQ = document.createElement('script');
+        jQ.type = 'text/javascript';
+        jQ.onload = jQ.onreadystatechange = _widgetStart;
+        jQ.src = '//ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js';
+        document.body.appendChild(jQ);
+        loaded++;
+      }
+
+      if( !(typeof Handlebars !== "undefined" && Handlebars !== null) ) {
+        HB = document.createElement('script');
+        HB.type = 'text/javascript';
+        HB.src = '//widget.getsnworks.com/javascripts/handlebars-1.0.rc.1.js';
+        document.body.appendChild(HB);
+        loaded++;
+      }
+
+      if( loaded > 0 ) {
+        return _widgetStart();
+      }
+
+    };
+
+    if( window.addEventListener ) {
+      window.addEventListener('load', loadCheck, false);
+    } else if( window.attachEvent ) {
+      window.attachEvent('onload', loadCheck);
+    }
+})();
