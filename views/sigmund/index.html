@@ -6,20 +6,97 @@ var _widgetStart = function() {
     var token = "{{token}}";
 
     jQuery(function() {
+        if( sigmund && sigmund.options.onload ) {
+            sigmund.options.onload();
+        }
 
-        $('#sig-vote').click(function(e) {
+        // first grab the approved stories
+        $.ajax({
+            dataType: 'jsonp',
+            url: '//widget.getsnworks.com/sigmund/stories',
+            success: function(data) {
+                if( !data || !data.length ) {
+                    if( sigmund && sigmund.options.onerror ) {
+                        sigmund.options.onerror.call(data);
+                    }
+
+                    return
+                }
+
+                var source   = $("#sigmund-story-template").html();
+                var template = Handlebars.compile(source);
+
+                $('#sigmund-container').empty();
+
+                $(data).each(function() {
+                    var context = {story:this};
+                    var html    = template(context);
+                    $('#sigmund-container').append(html);
+                });
+
+                if( FB ) {
+                    FB.XFBML.parse();
+                }
+            }
+        });
+
+        $('#sigmund-container').on('click', '[data-action="sigmund-submit"]', function(e) {
             e.preventDefault();
+            var content = $('#sigmund-story').val(),
+                name    = $('#sigmund-name').val(),
+                email   = $('#sigmund-email').val();
+
             $.ajax({
                 dataType:'jsonp',
                 data: {
-                    'sig': '{{token}}',
-                    'vote': '9ugxnork6b'
+                    name: name,
+                    story: $.base64.encode(content),
+                    email: email
                 },
-                url:'//widget.getsnworks.com/sigmund/vote',
-            }, function(data) {
-                console.log(data);
+                url:'//widget.getsnworks.com/sigmund/submit',
+                success: function(data) {
+                    if( data.isError ) {
+                        if( sigmund && sigmund.options.onerror ) {
+                            sigmund.options.onerror.call(data);
+                        }
+
+                        return
+                    }
+                    if( sigmund && sigmund.options.onsubmit ) {
+                        sigmund.options.onsubmit.call(data);
+                    }
+                }
             });
         });
+
+        $('#sigmund-container').on('click', '[data-action="sigmund-vote"]', function(e) {
+            e.preventDefault();
+            var hash = $(this).attr('data-hash');
+            var sig = '{{token}}';
+
+            $.ajax({
+                dataType:'jsonp',
+                data: {
+                    'sig': sig,
+                    'vote': hash
+                },
+                url:'//widget.getsnworks.com/sigmund/vote',
+                success: function(data) {
+                    if( data.isError ) {
+                        if( sigmund && sigmund.options.onerror ) {
+                            sigmund.options.onerror.call(data);
+                        }
+
+                        return
+                    }
+                    if( sigmund && sigmund.options.onvote ) {
+                        sigmund.options.onvote.call(data);
+                    }
+                }
+            });
+
+        });
+
 
     });
 };

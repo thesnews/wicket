@@ -1,4 +1,6 @@
 var wicket = require('../lib/wicket'),
+    _ = require('underscore'),
+    conf = require('../config'),
     mongoose = require('mongoose'),
     moment = require('moment'),
     story = require('../lib/models/sigmund/story'),
@@ -155,8 +157,14 @@ module.exports = function(app) {
     });
 
     app.get('/sigmund/stories', function(req, res) {
+        var sent_key = req.param('sig');
 
-        story.model.find({}, function(e, resp) {
+        var search_params = {approved:true};
+        if( sent_key == conf.private_key ) {
+            search_params = {};
+        }
+
+        story.model.find(search_params, function(e, resp) {
             if( e ) {
                 res.jsonp({
                     isError: true,
@@ -165,12 +173,43 @@ module.exports = function(app) {
                 return;
             }
 
+            if( !sent_key || sent_key != conf.private_key ) {
+                var out = [];
+                _.each(resp, function(item) {
+                    out.push({
+                        name:       item.first_name,
+                        content:    item.content_formatted,
+                        approved:   item.approved,
+                        hash:       item.hash,
+                        votes:      item.votes,
+                        date:       item.date,
+                    });
+                });
+
+                resp = out;
+            }
+
             res.jsonp(resp);
         });
 
     });
 
     app.get('/sigmund/approve', function(req, res) {
+        var sent_key = req.param('sig');
 
+        if( sent_key == conf.private_key ) {
+            res.send();
+            return;
+        }
     });
+
+    app.get('/sigmund/remove', function(req, res) {
+        var sent_key = req.param('sig');
+
+        if( sent_key == conf.private_key ) {
+            res.send();
+            return;
+        }
+    });
+
 }
