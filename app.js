@@ -44,6 +44,11 @@ app.configure('development', function(){
     app.use(express.errorHandler());
 });
 
+mongoose.connect('mongodb://localhost/wicket');
+var db = mongoose.connection;
+db.on('error', console.error.bind(console, 'connection error:'));
+
+
 require('./routes/sigmund')(app);
 
 http.createServer(app).listen(app.get('port'), function(){

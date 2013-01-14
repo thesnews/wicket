@@ -5,116 +5,33 @@ var wicket = require('../lib/wicket'),
     moment = require('moment'),
     story = require('../lib/models/sigmund/story'),
     vote = require('../lib/models/sigmund/vote')
-    apikey = require('../lib/models/apikey');
+    apikey = require('../lib/models/apikey'),
+    widget = require('../lib/models/widget');
 
-wicket.dbh();
-
-var check_key = function(hash, next) {
-    var expire = moment().utc().unix();
-    apikey.model
-        .find({hash: hash})
-        .where('expires').gt(expire)
-        .limit(1)
-        .exec(function(s, resp) {
-            if( resp.length ) {
-               var k = resp[0];
-                next(k);
-            } else {
-                next(false);
-            }
-        });
-};
+var postmark = require('postmark-api')(conf.postmark.key);
 
 module.exports = function(app) {
 
-    app.get('/sigmund.js', function(req, res){
+    app.get('/sigmund.js', [apikey.check, widget.check], function(req, res){
 
-        var render = function(my_key) {
-            if( !my_key || !my_key.hash ) {
-                my_key = new apikey.model;
-                my_key.save();
-
-                res.cookie('_sigmundk', my_key.hash, {maxAge:86400000});
+        res.render(
+            'sigmund/index',
+            {
+                token: req.apikey.hash,
+                widget: req.widget
             }
-
-            res.render(
-                'sigmund/index',
-                {
-                    token:my_key.hash
-                }
-            );
-        };
-
-        if( req.cookies._sigmundk ) {
-            check_key(req.cookies._sigmundk, render);
-        } else {
-            render();
-        }
+        );
 
     });
 
-    app.get('/sigmund/vote', function(req, res) {
-        var my_token        = req.param('sig'),
-            my_vote         = req.param('vote'),
-            now             = moment().utc().unix(),
-            my_key          = false,
-            existing_vote   = false;
+    app.get('/sigmund/:hash/vote', [apikey.check, story.load], function(req, res) {
+        var now = moment().utc().unix();
 
-        var fetch_story = function(k) {
-            my_key = k;
-
-            story.model.findOne({hash: my_vote}, function(e, resp) {
-
-                if( !e && resp ) {
-                    my_vote = resp;
-                } else {
-                    render({
-                        isError: true,
-                        message: 'No story found'
-                    });
-                    return;
-                }
-
-                check_votes();
-            });
-        }, check_votes = function() {
-            var lim = moment().utc().subtract('d', 1).unix();
-
-            vote.model
-                .find({story_hash: my_vote.hash, hash: my_key.hash})
-                .where('date').gte(lim)
-                .exec(function(e, resp) {
-
-                    if( resp.length ) {
-                        render({
-                            isError: true,
-                            message: 'You\'ve already voted for this story in the last 24 hours'
-                        });
-                        return;
-                    }
-
-                    cast_vote();
-                });
-        }, cast_vote = function() {
-
-            var new_vote = new vote.model;
-            new_vote.ip     = req.ip;
-            new_vote.story  = my_vote._id;
-            new_vote.story_hash = my_vote.hash;
-            new_vote.site   = 'statenews.com';
-            new_vote.hash   = my_key.hash;
-            new_vote.save();
-
-            my_vote.votes.push(new_vote);
-            my_vote.save();
-
-            render(new_vote);
-
-        }, render = function(o) {
+        var render = function(o) {
             res.jsonp(o);
         };
 
-        if( !my_token ) {
+        if( !req.signature ) {
             res.jsonp({
                 isError: true,
                 message: 'Missing or invalid key'
@@ -122,16 +39,42 @@ module.exports = function(app) {
             return;
         }
 
-        check_key(my_token, fetch_story);
+        var lim = moment().utc().subtract('m', 1).unix();
 
+        vote.model
+            .find({story_hash: req.sigmund.story.hash, hash: req.apikey.hash})
+            .where('date').gte(lim)
+            .exec(function(e, resp) {
+
+                if( resp.length ) {
+                    render({
+                        isError: true,
+                        message: 'You\'ve already voted for this story in the last 24 hours'
+                    });
+                    return;
+                }
+
+                var new_vote = new vote.model;
+                new_vote.ip     = req.ip;
+                new_vote.story  = req.sigmund.story._id;
+                new_vote.story_hash = req.sigmund.story.hash;
+                new_vote.site   = 'statenews.com';
+                new_vote.hash   = req.apikey.hash;
+                new_vote.save();
+
+                req.sigmund.story.votes.push(new_vote);
+                req.sigmund.story.save();
+
+                render(new_vote);
+            });
     });
 
-    app.get('/sigmund/submit', function(req, res) {
+    app.get('/sigmund/submit', widget.check, function(req, res) {
         var name        = req.param('name'),
             content     = req.param('story'),
             email       = req.param('email'),
-            ip          = req.ip,
-            now         = moment().utc().format('YYYY MM DD HH:mm ZZ');
+            ip          = req.ip
+            contact     = req.param('contact') || 0;
 
         if( content ) {
             content = Buffer(content, 'base64').toString('ascii');
@@ -145,71 +88,154 @@ module.exports = function(app) {
             return;
         }
 
+        if( !req.widget ) {
+            res.jsonp({
+                isError: true,
+                message: 'Invalid site id'
+            });
+            return;
+        }
+
         var s = new story.model;
         s.content = content;
         s.name = name;
         s.email = email;
         s.ip = ip;
-        s.site = 'statenews.com';
+        s.contact = contact;
+        s.widget = req.widget._id;
         s.save();
 
         res.jsonp(s);
     });
 
-    app.get('/sigmund/stories', function(req, res) {
-        var sent_key = req.param('sig');
+    app.get('/sigmund/stories', apikey.check, function(req, res) {
+        var limit   = 10,
+            skip    = req.param('offset') || 0;
 
-        var search_params = {approved:true};
-        if( sent_key == conf.private_key ) {
+//        var search_params = {approved:true};
+        var search_params = {};
+        if( req.signature == conf.private_key ) {
             search_params = {};
         }
 
-        story.model.find(search_params, function(e, resp) {
-            if( e ) {
-                res.jsonp({
-                    isError: true,
-                    message: 'Please try again later'
-                });
-                return;
-            }
-
-            if( !sent_key || sent_key != conf.private_key ) {
-                var out = [];
-                _.each(resp, function(item) {
-                    out.push({
-                        name:       item.first_name,
-                        content:    item.content_formatted,
-                        approved:   item.approved,
-                        hash:       item.hash,
-                        votes:      item.votes,
-                        date:       item.date,
+        story.model
+            .find(search_params)
+            .limit(limit)
+            .skip(skip)
+            .exec(function(e, resp) {
+                if( e ) {
+                    res.jsonp({
+                        isError: true,
+                        message: 'Please try again later'
                     });
-                });
+                    return;
+                }
 
-                resp = out;
-            }
+                if( !req.signature || req.signature != conf.private_key ) {
+                    var out = [];
+                    _.each(resp, function(item) {
+                        out.push({
+                            name:       item.first_name,
+                            content:    item.content,
+                            approved:   item.approved,
+                            hash:       item.hash,
+                            votes:      item.votes,
+                            date:       item.date,
+                        });
+                    });
 
-            res.jsonp(resp);
-        });
+                    resp = out;
+                }
+
+                res.jsonp(resp);
+            });
 
     });
 
-    app.get('/sigmund/approve', function(req, res) {
-        var sent_key = req.param('sig');
+    app.get('/sigmund/:hash', [apikey.check, story.load], function(req, res) {
 
-        if( sent_key == conf.private_key ) {
-            res.send();
+        if( !req.sigmund.story ) {
+            res.jsonp({
+                isError: true,
+                message: 'Story not found'
+            });
             return;
         }
+
+        if( !req.signature || req.signature != conf.private_key ) {
+            var out = {
+                name:       req.sigmund.story.first_name,
+                content:    req.sigmund.story.content,
+                approved:   req.sigmund.story.approved,
+                hash:       req.sigmund.story.hash,
+                votes:      req.sigmund.story.votes,
+                date:       req.sigmund.story.date,
+            };
+
+            resp = out;
+        } else {
+            out = req.sigmund.story;
+        }
+
+        res.jsonp(out);
     });
 
-    app.get('/sigmund/remove', function(req, res) {
-        var sent_key = req.param('sig');
+    app.get('/sigmund/:hash/approve', [apikey.check, story.load], function(req, res) {
 
-        if( sent_key == conf.private_key ) {
+        if( req.signature != conf.private_key ) {
             res.send();
             return;
         }
+
+        if( !req.sigmund.story ) {
+            res.jsonp({
+                isError: true,
+                message: 'Story not found'
+            });
+            return;
+        }
+        req.sigmund.story.approved = true;
+        req.sigmund.story.save();
+
+        if( req.sigmund.story.contact ) {
+            var message = "We need to verify your email address in order to approve your story.\n\nPlease visit the following link to verify your post:\n\n"
+                +'widget.getsnworks.com/'+s.hash+'/verify'
+                +"\n\nThanks!";
+
+            postmark.send({
+                'From':     'webmaster@statenews.com',
+                'To':       s.email,
+                'Subject':  'Please verify your email address',
+                'TextBody':  message
+            }, function (err, res) {
+                if( err ) {
+                    console.log(res);
+                }
+            });
+        }
+
+        res.jsonp(req.sigmund.story);
+
+    });
+
+    app.get('/sigmund/:hash/remove', [apikey.check, story.load], function(req, res) {
+
+        if( req.signature != conf.private_key ) {
+            res.send();
+            return;
+        }
+
+        if( !req.sigmund.story ) {
+            res.jsonp({
+                isError: true,
+                message: 'Story not found'
+            });
+            return;
+        }
+
+        req.sigmund.story.remove();
+
+        res.jsonp(req.sigmund.story);
     });
 
 }

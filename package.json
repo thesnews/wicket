@@ -36,7 +36,9 @@
     "mongoose": "~3.5.4",
     "swig": "~0.13.4",
     "underscore": "~1.4.3",
-    "moment": "~1.7.2"
+    "moment": "~1.7.2",
+    "node-markdown": "~0.1.1",
+    "postmark-api": "~0.2.0"
   },
   "devDependencies": {
     "grunt": "~0.3.17",
