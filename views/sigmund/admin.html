@@ -1,0 +1,80 @@
+<!DOCTYPE>
+
+<html>
+<head>
+    <title></title>
+    <link rel="stylesheet" type="text/css" media="screen, projection" href="/stylesheets/bootstrap.css" />
+
+</head>
+<body>
+
+    <div class="container">
+        <h1>Sigmund</h1>
+        <p class="lead">Sit down and tell me about it</p>
+
+        {#<div class="btn-group">
+            <a href="#" class="btn active">All</a>
+            <a href="#" class="btn">Active</a>
+            <a href="#" class="btn">Inactive</a>
+        </div>#}
+        <hr />
+        <div class="row" id="main-content">
+            <div class="span4 offset4">
+                <h5>Loading...</h5>
+                <div class="progress progress-striped active">
+                  <div class="bar" style="width:100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script id="sigmund-story-template" type="text/x-handlebars-template">
+    {% raw %}
+        <div class="span8 offset2">
+        {{#each stories}}
+            <div id="story-{{this.hash}}">
+                <div class="row">
+                    <div class="span2 offset6">
+                        <div class="btn-group">
+                            <a href="#" class="btn btn-small" data-action="approve" data-hash="{{this.hash}}"><i class="icon icon-thumbs-up"></i></a>
+                            <a href="#" class="btn btn-small btn-danger" data-action="remove" data-hash="{{this.hash}}"><i class="icon icon-white icon-remove"></i></a>
+                        </div>
+                    </div>
+                </div>
+
+                <blockquote>
+                    <p id="story-{{this.hash}}">{{ breaklines this.content }}</p>
+                    <small>By {{ this.name }} (<a href="mailto:{{this.email}}">{{this.email}}</a>)</small>
+                </blockquote>
+
+                <dl class="dl-horizontal">
+                    <dt>Status:</dt>
+                    <dd>
+                        {{# if this.approved }}
+                            <span class="label label-success">Approved</span>
+                        {{else}}
+                            <span class="label label-notice">Unapproved</span>
+                        {{/if}}
+                    </dd>
+
+                    <dt>Added:</dt>
+                    <dd>{{date this.date}}</dd>
+
+                    <dt>Votes:</dt>
+                    <dd>{{ this.votes.length }}</dd>
+                </dl>
+
+                <hr />
+            </div>
+        {{/each}}
+        </div>
+    {% endraw %}
+    </script>
+
+
+<script src="http://cdn.thesn.net/assets/src/js/vendor/jquery-1.7.2-min.js"></script>
+<script src="http://cdn.thesn.net/assets/src/js/vendor/handlebars.js"></script>
+<script src="/javascripts/bootstrap.min.js"></script>
+<script src="/javascripts/sigmund.js"></script>
+</body>
+</html>
