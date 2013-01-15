@@ -24,6 +24,15 @@ module.exports = function(app) {
 
     });
 
+    app.get('/sigmund/admin', function(req, res) {
+        if( req.ip.indexOf(conf.ipmask) === -1 ) {
+            res.send();
+            return;
+        }
+
+        res.render('sigmund/admin');
+    });
+
     app.get('/sigmund/:hash/vote', [apikey.check, story.load], function(req, res) {
         var now = moment().utc().unix();
 
@@ -74,7 +83,8 @@ module.exports = function(app) {
             content     = req.param('story'),
             email       = req.param('email'),
             ip          = req.ip
-            contact     = req.param('contact') || 0;
+            contact     = req.param('contact') || 0,
+            type        = req.param('type');
 
         if( content ) {
             content = Buffer(content, 'base64').toString('ascii');
@@ -103,25 +113,38 @@ module.exports = function(app) {
         s.ip = ip;
         s.contact = contact;
         s.widget = req.widget._id;
+        s.type = type;
         s.save();
 
         res.jsonp(s);
     });
 
     app.get('/sigmund/stories', apikey.check, function(req, res) {
-        var limit   = 10,
-            skip    = req.param('offset') || 0;
+        var limit   = req.param('limit') || 10,
+            skip    = req.param('offset') || 0,
+            filter  = req.param('filter') || 'all';
 
-//        var search_params = {approved:true};
-        var search_params = {};
+        var search_params = {approved:true};
         if( req.signature == conf.private_key ) {
             search_params = {};
+        }
+
+        if( filter ) {
+            switch(filter) {
+                case 'active':
+                    search_params.approved = true;
+                    break;
+                case 'inactive':
+                    search_params.approved = false;
+                    break;
+            }
         }
 
         story.model
             .find(search_params)
             .limit(limit)
             .skip(skip)
+            .sort('-date')
             .exec(function(e, resp) {
                 if( e ) {
                     res.jsonp({
@@ -150,6 +173,14 @@ module.exports = function(app) {
                 res.jsonp(resp);
             });
 
+    });
+
+    app.get('/sigmund/top', function(req, res) {
+        var limit   = 10;
+
+        story.model.find().sort('-votes_total').limit(10).exec(function(e, resp) {
+            res.jsonp(resp);
+        });
     });
 
     app.get('/sigmund/:hash', [apikey.check, story.load], function(req, res) {
@@ -198,14 +229,16 @@ module.exports = function(app) {
         req.sigmund.story.save();
 
         if( req.sigmund.story.contact ) {
-            var message = "We need to verify your email address in order to approve your story.\n\nPlease visit the following link to verify your post:\n\n"
-                +'widget.getsnworks.com/'+s.hash+'/verify'
+            var s = req.sigmund.story;
+
+            var message = "Hi "+s.name+",\n\nYour story has just been published, you can view it at:\n\n"
+                +s.widget.callback+'#'+s.hash+"\n\n"
                 +"\n\nThanks!";
 
             postmark.send({
                 'From':     'webmaster@statenews.com',
                 'To':       s.email,
-                'Subject':  'Please verify your email address',
+                'Subject':  'Your story has been published',
                 'TextBody':  message
             }, function (err, res) {
                 if( err ) {
